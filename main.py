@@ -462,9 +462,10 @@ def update_osc_status():
 continuous_measure_step = 0
 continuous_measure_last_trigger = 0
 continuous_measure_log_file = ""
+continuous_measure_screenshots_dir = ""
 
 def start_continuous_measure():
-    global continuous_measure_step, continuous_measure_last_trigger, continuous_measure_log_file
+    global continuous_measure_step, continuous_measure_last_trigger, continuous_measure_log_file, continuous_measure_screenshots_dir
     if not osc.is_connected():
         messagebox.showerror("Error", "Device is not connected!")
         return
@@ -508,6 +509,10 @@ def start_continuous_measure():
         for i in range(len(measure_types_cmd)):
             if var_cont_meas_type_enable[f"{ch}_{measure_types_cmd[i]}"].get():
                 header += f", CH{ch}:{measure_types_name[i]}"
+    if var_cont_meas_type_enable["screenshot"].get():
+        continuous_measure_screenshots_dir = f"{var_cont_meas_log_save_path.get()}\\{filename_header}{date_time}_screens"
+        os.makedirs(continuous_measure_screenshots_dir)
+        header += f", screenshot_name"
     cont_measure_log.insert(f"{header}\n")
 
     with open(continuous_measure_log_file, "w") as log:
@@ -526,6 +531,7 @@ def stop_continuous_measure():
 
 
 def perform_measure():
+    global continuous_measure_log_file, continuous_measure_screenshots_dir
     try:
         now = datetime.datetime.now()
         data = now.strftime("%Y_%m_%d_%H_%M_%S.") + now.strftime("%f")[0:2]
@@ -534,6 +540,17 @@ def perform_measure():
                 if var_cont_meas_type_enable[f"{ch}_{measure_types_cmd[i]}"].get():
                     value = float(osc.query(f"C{ch}:PAVA? {measure_types_cmd[i]}").split(",")[1].strip()[:-1].replace("H", "").replace("***", "Nan"))
                     data += ", " + str(value)
+        if var_cont_meas_type_enable["screenshot"].get():
+            if os.path.isdir(continuous_measure_screenshots_dir):
+                data += ", " + now.strftime("%Y_%m_%d_%H_%M_%S.") + now.strftime("%f")[0:2] + ".png"
+                screen = osc.dump_screen()
+                if screen:
+                    screen.save(f"{continuous_measure_screenshots_dir}\\screen_" + now.strftime("%Y_%m_%d_%H_%M_%S.") + now.strftime("%f")[0:2] + ".png")
+            else:
+                stop_continuous_measure()
+                messagebox.showerror("Error", "Screenshot folder not found!")
+                return
+
         cont_measure_log.insert(f"{data}\n")
         cont_measure_log.see(END)
         with open(continuous_measure_log_file, "a") as log:
@@ -1111,7 +1128,6 @@ def osc_autoconnect():
 
 
 def on_closing():
-    # TODO: zamknąć połączenie z oscyloskopem o ile jest
     global osc_thread
     if cont_measure_stop_btn["state"] == "normal":
         messagebox.showwarning("Warning", "First STOP continuous measure!")
@@ -1134,7 +1150,7 @@ def on_closing():
 
 
 gui = Tk()
-gui.title("Oscilloscope Tool v1.0.0 for SDS1000X-E series")
+gui.title("Oscilloscope Tool v1.1.0 for SDS1000X-E series")
 gui.geometry("1000x600")
 gui.resizable(False, False)
 try:
@@ -1534,7 +1550,7 @@ var_cont_meas_type_checkbox = {}
 
 Label(tab_measure, text="Measure", font=("Arial", 9, "bold"), **label_color["raised"]).place(x=5, y=150, width=200)
 frame_cmt = Frame(tab_measure, bg="#000")
-frame_cmt.place(x=5, y=180, width=200, height=250)
+frame_cmt.place(x=5, y=180, width=200, height=215)
 Label(frame_cmt, text="Type:", **label_color["flat"], font=("Arial", 8, "bold")).place(x=0, y=0, width=80)
 for i in range(1, 5):
     Label(frame_cmt, text=f"CH{i}", **btn_cc[i], font=("Arial", 8, "bold")).place(x=80+(30*(i-1)), y=0, width=30)
@@ -1546,6 +1562,11 @@ for i in range(len(measure_types_cmd)):
         var_cont_meas_type_enable[f"{ch}_{measure_types_cmd[i]}"].set(0)
         var_cont_meas_type_checkbox[f"{ch}_{measure_types_cmd[i]}"] = Checkbutton(frame_cmt, variable=var_cont_meas_type_enable[f"{ch}_{measure_types_cmd[i]}"], onvalue=1, offvalue=0, **radiobtn_color["black"])
         var_cont_meas_type_checkbox[f"{ch}_{measure_types_cmd[i]}"].place(x=80+(30*(ch-1)), y=20+22*i, width=30)
+Label(frame_cmt, text=f"Screen shot", **label_color["flat"], font=("Arial", 8, "bold")).place(x=0, y=198, width=80)
+var_cont_meas_type_enable[f"screenshot"] = IntVar(gui)
+var_cont_meas_type_enable[f"screenshot"].set(0)
+var_cont_meas_type_checkbox[f"screenshot"] = Checkbutton(frame_cmt, variable=var_cont_meas_type_enable[f"screenshot"], onvalue=1, offvalue=0, **radiobtn_color["black"])
+var_cont_meas_type_checkbox[f"screenshot"].place(x=80, y=195, width=30)
 
 Label(tab_measure, text="Control", font=("Arial", 10, "bold"), **label_color["raised_fat"]).place(x=5, y=400, width=355)
 
